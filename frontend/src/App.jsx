@@ -97,21 +97,64 @@ export function App() {
   // Deployment & Backup Modal State
   const [isDeployModalOpen, setIsDeployModalOpen] = useState(false);
 
-  // Style Update Handler
-  const handleUpdateStyle = (updatedStyle) => {
+  // Style Update Handler (Syncs to Supabase)
+  const handleUpdateStyle = async (updatedStyle) => {
+    // Optimistic UI Update
     const updated = (appData.inventory || []).map(item => 
       item.id === updatedStyle.id ? updatedStyle : item
     );
     setAppData(prev => ({ ...prev, inventory: updated }));
     setSelectedStyle(updatedStyle);
+
+    try {
+      const { supabase } = await import('./supabaseClient');
+      
+      // Separate relational data
+      const { lots, transactions, ...inventoryRow } = updatedStyle;
+      
+      // 1. Update Inventory Table
+      await supabase.from('inventory').upsert(inventoryRow);
+      
+      // 2. Upsert Lots
+      if (lots && lots.length > 0) {
+        const lotsToUpsert = lots.map(l => ({ ...l, inventory_id: updatedStyle.id }));
+        await supabase.from('lots').upsert(lotsToUpsert);
+      }
+
+      // 3. Sync Transactions (Delete and Re-insert for simplicity since they lack UUIDs locally)
+      if (transactions && transactions.length > 0) {
+        await supabase.from('transactions').delete().eq('inventory_id', updatedStyle.id);
+        
+        // Remove local temporary IDs if any, so Postgres generates new Serial IDs, preserving order
+        const txsToInsert = transactions.map(t => {
+          const { id, ...rest } = t;
+          return { ...rest, inventory_id: updatedStyle.id };
+        });
+        
+        // Insert in reverse so the newest stays on top if ordered by ID, 
+        // or just rely on the JSON array order. The DB will assign IDs sequentially.
+        await supabase.from('transactions').insert(txsToInsert.reverse());
+      }
+    } catch (e) {
+      console.error("Supabase sync failed for update:", e);
+    }
   };
 
-  // Add New Style Handler
-  const handleAddNewStyle = (newStyle) => {
+  // Add New Style Handler (Syncs to Supabase)
+  const handleAddNewStyle = async (newStyle) => {
+    // Optimistic update
     setAppData(prev => ({
       ...prev,
       inventory: [newStyle, ...(prev.inventory || [])]
     }));
+
+    try {
+      const { supabase } = await import('./supabaseClient');
+      const { lots, transactions, ...inventoryRow } = newStyle;
+      await supabase.from('inventory').insert(inventoryRow);
+    } catch(e) {
+      console.error("Supabase sync failed for new style:", e);
+    }
   };
 
   // Update Financials Handler
