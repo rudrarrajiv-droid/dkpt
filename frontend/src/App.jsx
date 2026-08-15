@@ -37,24 +37,47 @@ export function App() {
     setTheme(prev => prev === 'light' ? 'dark' : 'light');
   };
 
-  // Main Data State with LocalStorage Persistence
-  const [appData, setAppData] = useState(() => {
-    const saved = localStorage.getItem('dkp_malik_erp_2026');
-    if (saved) {
+  // Main Data State with Supabase
+  const [appData, setAppData] = useState({ company: {}, inventory: [], financials: {} });
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    async function loadData() {
       try {
-        const parsed = JSON.parse(saved);
-        if (parsed.inventory && parsed.inventory.length > 0) return parsed;
+        setIsLoading(true);
+        const { supabase } = await import('./supabaseClient');
+        
+        // Fetch company
+        const { data: companyData } = await supabase.from('company').select('*').single();
+        
+        // Fetch inventory with nested lots and transactions
+        const { data: inventoryData } = await supabase.from('inventory').select(`
+          *,
+          lots (*),
+          transactions (*)
+        `).order('sno', { ascending: true });
+        
+        setAppData({
+          company: companyData || {},
+          inventory: inventoryData || [],
+          financials: {}
+        });
       } catch (e) {
-        console.error('Failed to load saved data:', e);
+        console.error('Failed to load Supabase data:', e);
+        setAppData(initialData); // Fallback
+      } finally {
+        setIsLoading(false);
       }
     }
-    return initialData;
-  });
+    loadData();
+  }, []);
 
-  // Save to LocalStorage
+  // Sync to LocalStorage as a backup for offline support
   useEffect(() => {
     try {
-      localStorage.setItem('dkp_malik_erp_2026', JSON.stringify(appData));
+      if (appData.inventory && appData.inventory.length > 0) {
+        localStorage.setItem('dkp_malik_erp_2026', JSON.stringify(appData));
+      }
     } catch (e) {
       console.warn('LocalStorage save failed:', e);
     }
@@ -109,6 +132,15 @@ export function App() {
     localStorage.removeItem('dkp_malik_erp_2026');
     setAppData(initialData);
   };
+
+  if (isLoading) {
+    return (
+      <div className="app-container" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', flexDirection: 'column', gap: '20px' }}>
+        <BrandLogo size={80} />
+        <div style={{ color: 'var(--brand-gold)', fontSize: '1.2rem', animation: 'pulse 1.5s infinite' }}>Connecting to Cloud Database...</div>
+      </div>
+    );
+  }
 
   return (
     <div className="app-container">
