@@ -8,6 +8,8 @@ import PayrollView from './components/PayrollView';
 import LedgerView from './components/LedgerView';
 import LotModal from './components/LotModal';
 import DeployBackupModal from './components/DeployBackupModal';
+import LoginView from './components/LoginView';
+import ChangePasswordModal from './components/ChangePasswordModal';
 import { 
   LayoutDashboard, 
   Package, 
@@ -19,10 +21,18 @@ import {
   Sun, 
   Plus, 
   Download,
-  Building2
+  Building2,
+  LogOut,
+  KeyRound
 } from 'lucide-react';
 
 export function App() {
+  // Auth State
+  const [currentUser, setCurrentUser] = useState(() => {
+    const saved = localStorage.getItem('dkp_auth');
+    return saved ? JSON.parse(saved) : null;
+  });
+
   // Theme State
   const [theme, setTheme] = useState(() => {
     return localStorage.getItem('dkp_theme') || 'light';
@@ -94,8 +104,15 @@ export function App() {
   const [selectedStyle, setSelectedStyle] = useState(null);
   const [isLotModalOpen, setIsLotModalOpen] = useState(false);
 
-  // Deployment & Backup Modal State
+  // Modals
   const [isDeployModalOpen, setIsDeployModalOpen] = useState(false);
+  const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
+
+  // Logout Handler
+  const handleLogout = () => {
+    setCurrentUser(null);
+    localStorage.removeItem('dkp_auth');
+  };
 
   // Style Update Handler (Syncs to Supabase)
   const handleUpdateStyle = async (updatedStyle) => {
@@ -176,6 +193,17 @@ export function App() {
     setAppData(initialData);
   };
 
+  if (!currentUser) {
+    return (
+      <LoginView 
+        onLogin={(user) => {
+          setCurrentUser(user);
+          localStorage.setItem('dkp_auth', JSON.stringify(user));
+        }} 
+      />
+    );
+  }
+
   if (isLoading) {
     return (
       <div className="app-container" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', flexDirection: 'column', gap: '20px' }}>
@@ -224,11 +252,22 @@ export function App() {
               <Plus size={15} /> Add Inward Lot / Challan
             </button>
 
+            <div style={{ width: '1px', height: '24px', background: 'var(--border-color)', margin: '0 0.25rem' }}></div>
+
+            <button 
+              className="btn-header"
+              onClick={() => setIsChangePasswordOpen(true)}
+              title="Change Password"
+            >
+              <KeyRound size={15} />
+            </button>
+
             <button 
               className="btn-header"
               onClick={() => setIsDeployModalOpen(true)}
+              title="Deploy & Backup"
             >
-              <Cloud size={15} color="var(--brand-gold)" /> Online Deploy & Backup
+              <Cloud size={15} />
             </button>
 
             <button 
@@ -237,6 +276,15 @@ export function App() {
               title={`Switch to ${theme === 'light' ? 'Dark' : 'Light'} Mode`}
             >
               {theme === 'light' ? <Moon size={15} /> : <Sun size={15} color="#e6cb7e" />}
+            </button>
+
+            <button 
+              className="btn-header"
+              onClick={handleLogout}
+              style={{ color: 'var(--accent-red)' }}
+              title="Logout"
+            >
+              <LogOut size={15} /> Logout
             </button>
           </div>
 
@@ -285,7 +333,7 @@ export function App() {
 
           <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
             <span style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: 'var(--accent-green)' }}></span>
-            Project: Malik Creation (Port 3000)
+            Welcome, <strong>{currentUser.username}</strong> | Project: Malik Creation
           </div>
         </div>
       </nav>
@@ -365,6 +413,14 @@ export function App() {
           activeProject="DKPTEXPORTS_MALIK_CREATION"
           onRestoreData={handleRestoreData}
           onResetToDefault={handleResetToDefault}
+        />
+      )}
+
+      {/* Change Password Modal */}
+      {isChangePasswordOpen && (
+        <ChangePasswordModal
+          user={currentUser}
+          onClose={() => setIsChangePasswordOpen(false)}
         />
       )}
     </div>
